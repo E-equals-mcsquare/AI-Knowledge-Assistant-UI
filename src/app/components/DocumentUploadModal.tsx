@@ -9,7 +9,7 @@ import { Document } from "./ChatInterface";
 interface DocumentUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUpload: (files: File[]) => void;
+  onUpload: (files: File[], setProgress: (n: number) => void) => Promise<void>;
   documents: Document[];
 }
 
@@ -62,28 +62,17 @@ export function DocumentUploadModal({
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (selectedFiles.length === 0) return;
 
     setIsUploading(true);
     setUploadProgress(0);
 
-    // Simulate upload progress
-    const interval = setInterval(() => {
-      setUploadProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            onUpload(selectedFiles);
-            setSelectedFiles([]);
-            setIsUploading(false);
-            setUploadProgress(0);
-          }, 500);
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 200);
+    await onUpload(selectedFiles, setUploadProgress);
+
+    setSelectedFiles([]);
+    setIsUploading(false);
+    setUploadProgress(0);
   };
 
   const formatFileSize = (bytes: number) => {

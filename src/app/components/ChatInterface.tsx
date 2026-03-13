@@ -142,7 +142,7 @@ const API_BASE = import.meta.env.VITE_API_BASE;
 export function ChatInterface() {
   const { conversationId } = useParams();
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [conversations, setConversations] = useState(mockConversations);
+  const [conversations] = useState(mockConversations);
   const [documents, setDocuments] = useState(mockDocuments);
   const [messages, setMessages] = useState<Message[]>(
     conversationId && mockMessages[conversationId] ? mockMessages[conversationId] : []
@@ -196,21 +196,32 @@ export function ChatInterface() {
     setMessages([]);
   };
 
-  const handleUploadDocuments = async (files: File[]) => {
+  const handleUploadDocuments = async (files: File[], setProgress: (n: number) => void) => {
     const uploaded: Document[] = [];
 
-    for (const file of files) {
-      const formData = new FormData();
-      formData.append("file", file);
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
 
       try {
-        const response = await fetch(`${API_BASE}/upload`, {
+        // Step 1: Get presigned URL
+        const formData = new FormData();
+        formData.append("filename", file.name);
+        const res = await fetch(`${API_BASE}/upload`, {
           method: "POST",
           body: formData,
         });
+        if (!res.ok) throw new Error(`Failed to get upload URL for ${file.name}: ${res.status}`);
+        const data = await res.json();
+        const uploadUrl: string = data.upload_url ?? data.presigned_url ?? data.url;
 
-        if (!response.ok) throw new Error(`Upload failed for ${file.name}: ${response.status}`);
+        // Step 2: PUT file directly to S3 (no extra headers — presigned URL only signs Bucket+Key)
+        const s3Res = await fetch(uploadUrl, {
+          method: "PUT",
+          body: file,
+        });
+        if (!s3Res.ok) throw new Error(`S3 upload failed: ${s3Res.status}`);
 
+        setProgress(Math.round(((i + 1) / files.length) * 100));
         uploaded.push({
           id: Date.now().toString() + Math.random(),
           name: file.name,
